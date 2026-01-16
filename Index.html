@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stealth Runner</title>
+    <style>
+        body { margin: 0; background: #222; overflow: hidden; font-family: sans-serif; }
+        canvas { display: block; background: #333; margin: 0 auto; border: 4px solid #555; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">Score: 0</div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const ui = document.getElementById('ui');
+
+// Set Canvas Size
+canvas.width = 800;
+canvas.height = 400;
+
+// Game Variables
+let score = 0;
+let gameActive = true;
+let speed = 5;
+
+// Player Object
+const player = {
+    x: 50,
+    y: 300,
+    width: 40,
+    height: 60,
+    color: '#3498db',
+    dy: 0,
+    jumpForce: 12,
+    gravity: 0.6,
+    grounded: false
+};
+
+// Obstacles Array
+let obstacles = [];
+
+function spawnObstacle() {
+    obstacles.push({
+        x: canvas.width,
+        y: 310, // Ground level
+        width: 30,
+        height: 50,
+        color: '#e74c3c' // Enemy color
+    });
+}
+
+// Handle Inputs (Space or Click to Jump)
+window.addEventListener('keydown', (e) => { if (e.code === 'Space') jump(); });
+window.addEventListener('touchstart', jump);
+window.addEventListener('mousedown', jump);
+
+function jump() {
+    if (player.grounded && gameActive) {
+        player.dy = -player.jumpForce;
+        player.grounded = false;
+    } else if (!gameActive) {
+        resetGame();
+    }
+}
+
+function resetGame() {
+    score = 0;
+    speed = 5;
+    obstacles = [];
+    gameActive = true;
+    player.y = 300;
+    update();
+}
+
+function update() {
+    if (!gameActive) return;
+
+    // Clear Canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Ground
+    ctx.fillStyle = '#555';
+    ctx.fillRect(0, 360, canvas.width, 40);
+
+    // Apply Gravity to Player
+    player.dy += player.gravity;
+    player.y += player.dy;
+
+    // Floor Collision
+    if (player.y + player.height > 360) {
+        player.y = 360 - player.height;
+        player.dy = 0;
+        player.grounded = true;
+    }
+
+    // Draw Player
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    // Manage Obstacles
+    if (Math.random() < 0.015) spawnObstacle();
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.x -= speed;
+
+        // Draw Obstacle (The "Agents")
+        ctx.fillStyle = obs.color;
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+        // Simple AABB Collision Detection
+        if (player.x < obs.x + obs.width &&
+            player.x + player.width > obs.x &&
+            player.y < obs.y + obs.height &&
+            player.y + player.height > obs.y) {
+            gameActive = false;
+            alert("Spotted! Game Over. Score: " + score);
+        }
+
+        // Remove off-screen obstacles & increase score
+        if (obs.x + obs.width < 0) {
+            obstacles.splice(i, 1);
+            score++;
+            ui.innerHTML = "Score: " + score;
+            speed += 0.1; // Make it harder over time
+        }
+    }
+
+    requestAnimationFrame(update);
+}
+
+update();
+</script>
+</body>
+</html>
