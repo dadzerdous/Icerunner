@@ -1,19 +1,26 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Stealth Runner1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stealth Runner Mobile</title>
     <style>
-        body { margin: 0; background: #222; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
-        canvas { display: block; background: #333; margin: 20px auto; border: 4px solid #555; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        #ui { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); color: white; font-size: 24px; text-align: center; }
-        .controls { color: #aaa; font-size: 14px; margin-top: 10px; }
+        body { margin: 0; background: #1a1a1a; overflow: hidden; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; background: #222; margin: 0 auto; width: 100vw; height: auto; }
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; color: white; pointer-events: none; }
+        .mobile-hud { position: absolute; bottom: 0; width: 100%; height: 60px; display: flex; opacity: 0.5; pointer-events: none; }
+        .zone { flex: 1; border: 1px solid #444; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
     </style>
 </head>
 <body>
     <div id="ui">
-        SCORE: <span id="score">0</span>
-        <div class="controls">SPACE to Jump | DOWN ARROW to Slide</div>
+        <div style="font-size: 24px;">SCORE: <span id="score">0</span></div>
     </div>
+    
+    <div class="mobile-hud">
+        <div class="zone">HOLD LEFT TO SLIDE</div>
+        <div class="zone">TAP RIGHT TO JUMP</div>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -21,73 +28,88 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 
+// Static internal resolution
 canvas.width = 800;
 canvas.height = 400;
 
-// Game State
 let score = 0;
 let gameActive = true;
 let speed = 6;
 let frameCount = 0;
 let nextSpawnFrame = 0;
 
-// Player Properties
 const player = {
-    x: 80,
-    y: 300,
-    width: 40,
-    height: 60,
-    baseHeight: 60,
-    slideHeight: 30,
+    x: 80, y: 300,
+    width: 40, height: 60,
+    baseHeight: 60, slideHeight: 30,
     color: '#3498db',
-    dy: 0,
-    jumpForce: 13,
-    gravity: 0.7,
-    grounded: false,
-    isSliding: false
+    dy: 0, jumpForce: 13, gravity: 0.7,
+    grounded: false, isSliding: false
 };
 
 let obstacles = [];
 
-// Input Listeners
-const keys = {};
-window.addEventListener('keydown', (e) => { 
-    keys[e.code] = true;
-    if (e.code === 'Space' && player.grounded) {
-        player.dy = -player.jumpForce;
-        player.grounded = false;
+// --- INPUT HANDLING (MOBILE & DESKTOP) ---
+const input = { left: false, right: false };
+
+function handleStart(e) {
+    if (!gameActive) { resetGame(); return; }
+    
+    const touchX = e.touches ? e.touches[0].clientX : e.clientX;
+    const screenWidth = window.innerWidth;
+
+    if (touchX < screenWidth / 2) {
+        input.left = true; // Slide zone
+    } else {
+        if (player.grounded) {
+            player.dy = -player.jumpForce;
+            player.grounded = false;
+        }
     }
+}
+
+function handleEnd(e) {
+    // If it's a touch event, we check if any touches remain on the left side
+    if (e.touches) {
+        let leftActive = false;
+        for(let i=0; i<e.touches.length; i++) {
+            if (e.touches[i].clientX < window.innerWidth / 2) leftActive = true;
+        }
+        input.left = leftActive;
+    } else {
+        input.left = false;
+    }
+}
+
+// Listeners for both Touch and Mouse
+window.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(e); }, {passive: false});
+window.addEventListener('touchend', (e) => { e.preventDefault(); handleEnd(e); }, {passive: false});
+window.addEventListener('mousedown', handleStart);
+window.addEventListener('mouseup', handleEnd);
+
+// Keyboard Fallback
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && player.grounded) { player.dy = -player.jumpForce; player.grounded = false; }
+    if (e.code === 'ArrowDown') input.left = true;
     if (!gameActive) resetGame();
 });
-window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+window.addEventListener('keyup', (e) => { if (e.code === 'ArrowDown') input.left = false; });
 
 function spawnObstacle() {
-    // Randomly choose between a ground block (jump over) or a high block (slide under)
-    const type = Math.random() > 0.3 ? 'ground' : 'air';
-    
+    const type = Math.random() > 0.4 ? 'ground' : 'air';
     obstacles.push({
         x: canvas.width,
         y: type === 'ground' ? 310 : 250, 
-        width: 30,
+        width: 35,
         height: type === 'ground' ? 50 : 40,
-        color: type === 'ground' ? '#e74c3c' : '#f1c40f',
-        type: type
+        color: type === 'ground' ? '#e74c3c' : '#f1c40f'
     });
-
-    // Ensure there is always a fair gap (30-60 frames based on speed)
-    const minGap = 40;
-    const randomGap = Math.floor(Math.random() * 50);
-    nextSpawnFrame = frameCount + minGap + randomGap;
+    nextSpawnFrame = frameCount + 50 + Math.floor(Math.random() * 40);
 }
 
 function resetGame() {
-    score = 0;
-    speed = 6;
-    obstacles = [];
-    gameActive = true;
-    player.y = 300;
-    frameCount = 0;
-    nextSpawnFrame = 0;
+    score = 0; speed = 6; obstacles = []; gameActive = true;
+    player.y = 300; frameCount = 0; nextSpawnFrame = 0;
     scoreEl.innerText = score;
     update();
 }
@@ -96,8 +118,8 @@ function update() {
     if (!gameActive) return;
     frameCount++;
 
-    // Handle Sliding
-    if (keys['ArrowDown'] && player.grounded) {
+    // Slide Logic
+    if (input.left && player.grounded) {
         player.isSliding = true;
         player.height = player.slideHeight;
     } else {
@@ -107,8 +129,8 @@ function update() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Ground Line
-    ctx.strokeStyle = '#777';
+    // Ground line
+    ctx.strokeStyle = '#555';
     ctx.beginPath(); ctx.moveTo(0, 360); ctx.lineTo(canvas.width, 360); ctx.stroke();
 
     // Physics
@@ -125,40 +147,32 @@ function update() {
     ctx.fillStyle = player.color;
     ctx.fillRect(player.x, player.y, player.width, player.height);
 
-    // Spawning Logic
-    if (frameCount >= nextSpawnFrame) {
-        spawnObstacle();
-    }
+    if (frameCount >= nextSpawnFrame) spawnObstacle();
 
-    // Process Obstacles
     for (let i = obstacles.length - 1; i >= 0; i--) {
         let obs = obstacles[i];
         obs.x -= speed;
-
         ctx.fillStyle = obs.color;
         ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
 
-        // Precise Collision Detection
-        if (player.x < obs.x + obs.width &&
-            player.x + player.width > obs.x &&
-            player.y < obs.y + obs.height &&
-            player.y + player.height > obs.y) {
+        if (player.x < obs.x + obs.width && player.x + player.width > obs.x &&
+            player.y < obs.y + obs.height && player.y + player.height > obs.y) {
             gameActive = false;
             ctx.fillStyle = "white";
-            ctx.font = "40px Courier New";
-            ctx.fillText("SPOTTED!", 320, 200);
-            ctx.font = "20px Courier New";
-            ctx.fillText("Press any key to restart", 280, 240);
+            ctx.textAlign = "center";
+            ctx.font = "30px Arial";
+            ctx.fillText("CAUGHT!", canvas.width/2, 200);
+            ctx.font = "20px Arial";
+            ctx.fillText("Tap to try again", canvas.width/2, 240);
         }
 
         if (obs.x + obs.width < 0) {
             obstacles.splice(i, 1);
             score++;
             scoreEl.innerText = score;
-            speed += 0.05; // Gentle difficulty curve
+            speed += 0.04;
         }
     }
-
     requestAnimationFrame(update);
 }
 
