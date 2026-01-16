@@ -3,93 +3,118 @@
 <head>
     <title>Stealth Runner</title>
     <style>
-        body { margin: 0; background: #222; overflow: hidden; font-family: sans-serif; }
-        canvas { display: block; background: #333; margin: 0 auto; border: 4px solid #555; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; pointer-events: none; }
+        body { margin: 0; background: #222; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        canvas { display: block; background: #333; margin: 20px auto; border: 4px solid #555; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #ui { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); color: white; font-size: 24px; text-align: center; }
+        .controls { color: #aaa; font-size: 14px; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <div id="ui">Score: 0</div>
+    <div id="ui">
+        SCORE: <span id="score">0</span>
+        <div class="controls">SPACE to Jump | DOWN ARROW to Slide</div>
+    </div>
     <canvas id="gameCanvas"></canvas>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const ui = document.getElementById('ui');
+const scoreEl = document.getElementById('score');
 
-// Set Canvas Size
 canvas.width = 800;
 canvas.height = 400;
 
-// Game Variables
+// Game State
 let score = 0;
 let gameActive = true;
-let speed = 5;
+let speed = 6;
+let frameCount = 0;
+let nextSpawnFrame = 0;
 
-// Player Object
+// Player Properties
 const player = {
-    x: 50,
+    x: 80,
     y: 300,
     width: 40,
     height: 60,
+    baseHeight: 60,
+    slideHeight: 30,
     color: '#3498db',
     dy: 0,
-    jumpForce: 12,
-    gravity: 0.6,
-    grounded: false
+    jumpForce: 13,
+    gravity: 0.7,
+    grounded: false,
+    isSliding: false
 };
 
-// Obstacles Array
 let obstacles = [];
 
-function spawnObstacle() {
-    obstacles.push({
-        x: canvas.width,
-        y: 310, // Ground level
-        width: 30,
-        height: 50,
-        color: '#e74c3c' // Enemy color
-    });
-}
-
-// Handle Inputs (Space or Click to Jump)
-window.addEventListener('keydown', (e) => { if (e.code === 'Space') jump(); });
-window.addEventListener('touchstart', jump);
-window.addEventListener('mousedown', jump);
-
-function jump() {
-    if (player.grounded && gameActive) {
+// Input Listeners
+const keys = {};
+window.addEventListener('keydown', (e) => { 
+    keys[e.code] = true;
+    if (e.code === 'Space' && player.grounded) {
         player.dy = -player.jumpForce;
         player.grounded = false;
-    } else if (!gameActive) {
-        resetGame();
     }
+    if (!gameActive) resetGame();
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+function spawnObstacle() {
+    // Randomly choose between a ground block (jump over) or a high block (slide under)
+    const type = Math.random() > 0.3 ? 'ground' : 'air';
+    
+    obstacles.push({
+        x: canvas.width,
+        y: type === 'ground' ? 310 : 250, 
+        width: 30,
+        height: type === 'ground' ? 50 : 40,
+        color: type === 'ground' ? '#e74c3c' : '#f1c40f',
+        type: type
+    });
+
+    // Ensure there is always a fair gap (30-60 frames based on speed)
+    const minGap = 40;
+    const randomGap = Math.floor(Math.random() * 50);
+    nextSpawnFrame = frameCount + minGap + randomGap;
 }
 
 function resetGame() {
     score = 0;
-    speed = 5;
+    speed = 6;
     obstacles = [];
     gameActive = true;
     player.y = 300;
+    frameCount = 0;
+    nextSpawnFrame = 0;
+    scoreEl.innerText = score;
     update();
 }
 
 function update() {
     if (!gameActive) return;
+    frameCount++;
 
-    // Clear Canvas
+    // Handle Sliding
+    if (keys['ArrowDown'] && player.grounded) {
+        player.isSliding = true;
+        player.height = player.slideHeight;
+    } else {
+        player.isSliding = false;
+        player.height = player.baseHeight;
+    }
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Ground
-    ctx.fillStyle = '#555';
-    ctx.fillRect(0, 360, canvas.width, 40);
+    // Draw Ground Line
+    ctx.strokeStyle = '#777';
+    ctx.beginPath(); ctx.moveTo(0, 360); ctx.lineTo(canvas.width, 360); ctx.stroke();
 
-    // Apply Gravity to Player
+    // Physics
     player.dy += player.gravity;
     player.y += player.dy;
 
-    // Floor Collision
     if (player.y + player.height > 360) {
         player.y = 360 - player.height;
         player.dy = 0;
@@ -100,32 +125,37 @@ function update() {
     ctx.fillStyle = player.color;
     ctx.fillRect(player.x, player.y, player.width, player.height);
 
-    // Manage Obstacles
-    if (Math.random() < 0.015) spawnObstacle();
+    // Spawning Logic
+    if (frameCount >= nextSpawnFrame) {
+        spawnObstacle();
+    }
 
+    // Process Obstacles
     for (let i = obstacles.length - 1; i >= 0; i--) {
         let obs = obstacles[i];
         obs.x -= speed;
 
-        // Draw Obstacle (The "Agents")
         ctx.fillStyle = obs.color;
         ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
 
-        // Simple AABB Collision Detection
+        // Precise Collision Detection
         if (player.x < obs.x + obs.width &&
             player.x + player.width > obs.x &&
             player.y < obs.y + obs.height &&
             player.y + player.height > obs.y) {
             gameActive = false;
-            alert("Spotted! Game Over. Score: " + score);
+            ctx.fillStyle = "white";
+            ctx.font = "40px Courier New";
+            ctx.fillText("SPOTTED!", 320, 200);
+            ctx.font = "20px Courier New";
+            ctx.fillText("Press any key to restart", 280, 240);
         }
 
-        // Remove off-screen obstacles & increase score
         if (obs.x + obs.width < 0) {
             obstacles.splice(i, 1);
             score++;
-            ui.innerHTML = "Score: " + score;
-            speed += 0.1; // Make it harder over time
+            scoreEl.innerText = score;
+            speed += 0.05; // Gentle difficulty curve
         }
     }
 
